@@ -1,0 +1,6 @@
+pytest==8.4.1
+pytest-sugar==1.0.0
+requests==2.32.4
+black==25.1.0
+allure-pytest==2.14.3
+paramiko==3.5.1

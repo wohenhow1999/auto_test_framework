@@ -1,0 +1,25 @@
+{
+  "name": "My Python Dev Container",
+  // "image": "jacky2522561/uni_image:20250619",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/app",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        "ms-python.python"
+      ]
+    }
+  },
+  "postCreateCommand": "pip install --no-cache-dir -r requirements.txt",
+  "updateContentCommand": "pip install --no-cache-dir -r requirements.txt",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/app,type=bind"
+  ],
+  "remoteUser": "root"
+}
