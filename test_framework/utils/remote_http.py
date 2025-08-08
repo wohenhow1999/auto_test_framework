@@ -1,7 +1,7 @@
 import logging
 import pytest
 from typing import Optional, Union
-from infrastructure.utils.ssh_helpers import Ssh
+from test_framework.utils.ssh_helpers import Ssh
 
 
 class RemoteHttpServerManager:

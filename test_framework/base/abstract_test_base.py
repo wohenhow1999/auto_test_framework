@@ -1,13 +1,13 @@
 from types import FunctionType
 from abc import ABC, abstractmethod
-from infrastructure.utils.assertions import Assertion
-from infrastructure.utils.cli_helpers import Cli
-from infrastructure.utils.ssh_helpers import Ssh
-from infrastructure.utils.decorators import Decorator
-from infrastructure.utils.apv_helpers import Apv
-from infrastructure.utils.remote_http import RemoteHttpServerManager
-from infrastructure.reporting.allure_report_helpers import Allure
-from infrastructure.utils.logger import logger_instance
+from test_framework.utils.assertions import Assertion
+from test_framework.utils.cli_helpers import Cli
+from test_framework.utils.ssh_helpers import Ssh
+from test_framework.utils.decorators import Decorator
+from test_framework.utils.apv_helpers import Apv
+from test_framework.utils.remote_http import RemoteHttpServerManager
+from test_framework.reporting.allure_report_helpers import Allure
+from test_framework.utils.logger import logger_instance
 
 
 class AbstractTestBase(ABC):

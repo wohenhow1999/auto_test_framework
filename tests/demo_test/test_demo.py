@@ -1,7 +1,7 @@
 import pytest
 import allure
 import time
-from infrastructure.base.abstract_test_base import AbstractTestBase
+from test_framework.base.abstract_test_base import AbstractTestBase
 
 
 class TestSUM(AbstractTestBase):

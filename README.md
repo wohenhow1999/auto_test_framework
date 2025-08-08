@@ -9,7 +9,7 @@ This project leverages pytest, and Allure to ensure high-quality, maintainable t
 ├── .devcontainer/
 │   ├── devcontainer.json
 │   └── Dockerfile
-├── infrastructure/
+├── test_framework/
 │   ├── base/
 │   │   └── abstract_test_base.py
 │   ├── core/ (None)

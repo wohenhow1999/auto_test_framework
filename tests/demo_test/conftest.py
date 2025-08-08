@@ -7,10 +7,10 @@ from _pytest.nodes import Item
 from _pytest.runner import CallInfo
 from _pytest.main import Session
 from typing import Generator, Any, Dict
-from infrastructure.utils.logger import logger_instance
-from infrastructure.reporting.allure_report_helpers import Allure
-from infrastructure.utils.ssh_helpers import Ssh
-from infrastructure.utils.apv_helpers import Apv
+from test_framework.utils.logger import logger_instance
+from test_framework.reporting.allure_report_helpers import Allure
+from test_framework.utils.ssh_helpers import Ssh
+from test_framework.utils.apv_helpers import Apv
 from tests.config.settings import APV_SERVER_CONFIG
 from tests.config.settings import META_CONFIG
 
