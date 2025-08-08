@@ -5,7 +5,7 @@ This project leverages pytest, and Allure to ensure high-quality, maintainable t
 
 ## Project Structure
 ```
-test_automation_framework/
+/
 ├── .devcontainer/
 │   ├── devcontainer.json
 │   └── Dockerfile
