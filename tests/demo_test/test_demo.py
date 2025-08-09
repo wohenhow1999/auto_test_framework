@@ -4,7 +4,7 @@ import time
 from test_framework.base.abstract_test_base import AbstractTestBase
 
 
-class TestSUM(AbstractTestBase):
+class TestDemo(AbstractTestBase):
 
     @classmethod
     def get_test_case_catalog(cls):

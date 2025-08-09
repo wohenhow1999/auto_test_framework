@@ -8,9 +8,6 @@ PORT=5666
 PYTEST_COMMAND="pytest -s"
 NODE_IDS=""
 
-echo ">>> Files inside container at /app:"
-ls -R /app
-
 if [ $# -eq 0 ]; then
     echo "No specific test case provided. Running all tests."
 else

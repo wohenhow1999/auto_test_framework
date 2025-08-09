@@ -17,9 +17,8 @@
     }
   },
   "postCreateCommand": "pip install --no-cache-dir -r requirements.txt",
-  "updateContentCommand": "pip install --no-cache-dir -r requirements.txt",
   "mounts": [
     "source=${localWorkspaceFolder},target=/app,type=bind"
   ],
-  "remoteUser": "root"
+  "remoteUser": "vscode"
 }

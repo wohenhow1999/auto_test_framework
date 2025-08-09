@@ -4,7 +4,7 @@ import time
 import logging
 from typing import Optional, Union
 from test_framework.utils.decorators import Decorator
-from tests.config.settings import JUMP_SERVER_CONFIG
+from tests.demo_test.settings import JUMP_SERVER_CONFIG
 
 
 class Ssh:
