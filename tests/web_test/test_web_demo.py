@@ -10,7 +10,7 @@ class TestWebUI(AbstractTestBase):
         return {
             "testcase 1": {
                 "test_function_name": cls.test_google_navigation,
-                "description": "Sample test case showing basic browser navigation to Google.",
+                "description": "Test navigation to Google homepage.",
                 # https://google.com
             },
         }
@@ -23,8 +23,9 @@ class TestWebUI(AbstractTestBase):
         with self.allure.step_with_log("Teardown"):
             self.playwright.close()
 
-    @allure.description("Sample test case showing basic browser navigation to Google")
+    @allure.description("Test navigation to Google homepage.")
     def test_google_navigation(self):
+        """Test navigation to Google homepage."""
         with self.allure.step_with_log("Step1: Navigate to Google page"):
             google_page_url = "https://www.google.com"
             self.playwright.open_page(
