@@ -1,8 +1,5 @@
-import os
 import allure
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+import time
 from test_framework.base.abstract_test_base import AbstractTestBase
 
 
@@ -12,32 +9,27 @@ class TestWebUI(AbstractTestBase):
     def get_test_case_catalog(cls):
         return {
             "testcase 1": {
-                "test_function_name": cls.test_google,
-                "description": "Jamie self test about slb ip",
+                "test_function_name": cls.test_google_navigation,
+                "description": "Sample test case showing basic browser navigation to Google.",
                 # https://google.com
             },
         }
 
     def setup(self):
-        self.logger.info("---setup---")
-    
+        with self.allure.step_with_log("Setup"):
+            self.playwright.launch()
+
     def teardown(self):
-        self.logger.info("----teardown----")
+        with self.allure.step_with_log("Teardown"):
+            self.playwright.close()
 
-    @allure.description("Web UI demo")
-    def test_google(self):
-        with self.allure.step_with_log("Step1: open google page"):
-            print(f"DISPLAY = {os.environ.get('DISPLAY')}")
-            options = Options()
-            options.add_argument("--headless")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
-
-            service = Service("/usr/local/bin/chromedriver")
-            driver = webdriver.Chrome(service=service, options=options)
-
-            driver.get("https://www.google.com")
-            assert "Google" in driver.title
-
-            driver.quit()
+    @allure.description("Sample test case showing basic browser navigation to Google")
+    def test_google_navigation(self):
+        with self.allure.step_with_log("Step1: Navigate to Google page"):
+            google_page_url = "https://www.google.com"
+            self.playwright.open_page(
+                url=google_page_url, 
+                expected_title="Google",
+                expect_url="google.com"
+            )
+            time.sleep(5)

@@ -5,6 +5,7 @@ from test_framework.utils.cli_helpers import Cli
 from test_framework.utils.ssh_helpers import Ssh
 from test_framework.utils.decorators import Decorator
 from test_framework.utils.apv_helpers import Apv
+from test_framework.utils.playwright_helpers import PlaywrightHelper
 from test_framework.utils.remote_http import RemoteHttpServerManager
 from test_framework.reporting.allure_report_helpers import Allure
 from test_framework.utils.logger import logger_instance
@@ -69,6 +70,7 @@ class AbstractTestBase(ABC):
 
         if self._should_skip_setup(method):
             return
+        self.logger.info("---setup---")
         self.setup()
 
     def teardown_method(self, method: FunctionType) -> None:
@@ -83,6 +85,7 @@ class AbstractTestBase(ABC):
         """
         if self._should_skip_teardown(method):
             return
+        self.logger.info("---teardown---")
         self.teardown()
 
     def __prepare_logger(self, method: FunctionType):
@@ -109,6 +112,7 @@ class AbstractTestBase(ABC):
         self.decorator = Decorator()
         self.allure = Allure(logger=self.logger)
         self.apv = Apv(logger=self.logger, ssh=self.ssh)
+        self.playwright = PlaywrightHelper(logger=self.logger, headless=False)
         self.http_server_manager = RemoteHttpServerManager(
             logger=self.logger, ssh=self.ssh
         )
