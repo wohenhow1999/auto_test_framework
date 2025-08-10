@@ -36,7 +36,7 @@ This project leverages pytest, and Allure to ensure high-quality, maintainable t
 │   └──  web_test/
 │       ├── conftest.py
 │       ├── settings.py
-│       └── test_demo.py
+│       └── test_web_demo.py.py
 ├── logs/
 ├── artifacts/
 ├── reports/
