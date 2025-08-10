@@ -5,7 +5,7 @@ import logging
 from io import StringIO
 from contextlib import contextmanager
 from typing import Optional, Union
-from infrastructure.utils.logger import logger_instance
+from test_framework.utils.logger import logger_instance
 
 
 class Allure:

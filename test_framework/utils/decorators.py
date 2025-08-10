@@ -4,7 +4,7 @@ import time
 import logging
 import pytest
 from typing import Callable
-from tests.config.settings import JumpServerConfig
+from tests.demo_test.settings import JumpServerConfig
 
 
 class Decorator:

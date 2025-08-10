@@ -8,9 +8,6 @@ PORT=5666
 PYTEST_COMMAND="pytest -s"
 NODE_IDS=""
 
-echo ">>> Files inside container at /app:"
-ls -R /app
-
 if [ $# -eq 0 ]; then
     echo "No specific test case provided. Running all tests."
 else
@@ -76,4 +73,5 @@ fi
 eval ${PYTEST_COMMAND}
 chmod -R 777 "${RESULT_DIR}"
 allure generate "${RESULT_DIR}" -o "${REPORT_BASE}" --clean
-allure open "${REPORT_BASE}" --port "${PORT}" --host 0.0.0.0
+# allure open "${REPORT_BASE}" --port "${PORT}" --host 0.0.0.0
+allure open "${REPORT_BASE}" --port "${PORT}" --host "localhost"
