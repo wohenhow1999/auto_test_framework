@@ -62,7 +62,7 @@ https://gitforwindows.org/
 
 ### Setup Options
 
-#### Option A — Using Docker
+### Option A — Using Docker
 1. Install Docker Desktop
 https://www.docker.com/products/docker-desktop
 
