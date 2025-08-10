@@ -22,19 +22,21 @@ This project leverages pytest, and Allure to ensure high-quality, maintainable t
 │   │   ├── apv_helpers.py
 │   │   ├── ssh_helpers.py
 │   │   ├── cli_helpers.py
-│   │   ├── web_helpers.py (None)
+│   │   ├── playwright_helpers.py
 │   │   └── logger.py
 │   └── config/
 │       └── settings.py (None)
 ├── tests/
 │   ├── config/
 │   │   └── settings.py
-│   ├── slb/
-│   │   └── test_slb_basic.py
-│   ├── vpn/
-│   │   └── test_vpn_basic.py
-│   ├── data/
-│   └── conftest.py
+│   ├── demo_test/
+│   │   ├── conftest.py
+│   │   ├── settings.py
+│   │   └── test_demo.py
+│   └──  web_test/
+│       ├── conftest.py
+│       ├── settings.py
+│       └── test_demo.py
 ├── logs/
 ├── artifacts/
 ├── reports/
@@ -50,20 +52,27 @@ This project leverages pytest, and Allure to ensure high-quality, maintainable t
 ├── requirements.txt
 └── README.md
 ```
-## Prerequisites
+## Prerequisites 
 
+1. Install Visual Studio Code
+https://code.visualstudio.com/
+
+2. Install Git Bash (for Windows users)
+https://gitforwindows.org/
+
+### Setup Options
+
+#### Option A — Using Docker
 1. Install Docker Desktop
 https://www.docker.com/products/docker-desktop
 
-2. Install Visual Studio Code
-https://code.visualstudio.com/
+2. Install VSCode extension Dev Containers
 
-3. Install VSCode extension Dev Containers
+3. Click on Hype-V service on Windows10/11
 
-4. Install Git Bash (for Windows users)
-https://gitforwindows.org/
-
-5. Click on Hype-V service on Windows10/11
+### Option B — Without Docker
+1. Open Git Bash (Windows) or Terminal (Mac/Linux)
+`pip install --no-cache-dir -r requirements.txt`
 
 ## Running Tests
 
