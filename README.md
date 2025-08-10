@@ -1,3 +1,7 @@
+> **Author**: Jacky 辛介宇  
+> **Role**: Developer & Maintainer  
+> **Contact**: wohenhow1999@gmail.com
+
 # test automation framework
 
 An end-to-end automated testing framework.
