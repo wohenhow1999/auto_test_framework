@@ -1,7 +1,7 @@
 # test automation framework
 
 An end-to-end automated testing framework.
-This project leverages pytest, and Allure to ensure high-quality, maintainable test automation with clear reporting and modular architecture.
+This project leverages pytest, playwright and Allure to ensure high-quality, maintainable test automation with clear reporting and modular architecture.
 
 ## Project Structure
 ```
