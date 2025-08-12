@@ -103,3 +103,6 @@ After test execution, open the Allure report at:
 `http://localhost:8180`
 
 (You can change the port number in run_test.sh)
+
+## Demo Results
+**[Click here to open the demo Allure Report](https://wohenhow1999.github.io/allure_demo_report/)**
