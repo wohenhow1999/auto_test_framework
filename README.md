@@ -37,6 +37,10 @@ This project leverages pytest, playwright and Allure to ensure high-quality, mai
 │   │   ├── conftest.py
 │   │   ├── settings.py
 │   │   └── test_demo.py
+│   ├── api_test/
+│   │   ├── conftest.py
+│   │   ├── settings.py
+│   │   └── test_api_demo.py
 │   └──  web_test/
 │       ├── conftest.py
 │       ├── settings.py
