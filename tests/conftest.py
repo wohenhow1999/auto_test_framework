@@ -10,6 +10,14 @@ from tests.config.settings import META_CONFIG
 
 
 @pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_setup(item: Item) -> Generator[Any, None, None]:
+    log_stream = logger_instance.test_log_stream
+    log_stream.truncate(0)
+    log_stream.seek(0)
+    yield
+
+
+@pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(
     item: Item, call: CallInfo
 ) -> Generator[Any, None, None]:
@@ -35,7 +43,7 @@ def pytest_runtest_makereport(
     outcome = yield
     report = outcome.get_result()
 
-    if report.when == "call":
+    if report.when == "teardown":
         log_stream = logger_instance.test_log_stream
         log_contents = log_stream.getvalue()
         if log_contents:
@@ -48,17 +56,6 @@ def pytest_runtest_makereport(
         log_stream.truncate(0)
         log_stream.seek(0)
 
-def pytest_sessionstart(session: Session) -> None:
-    """
-    Pytest hook called once before all tests start.
-
-    Args:
-        session (Session): The pytest test session object representing the entire test run.
-
-    Returns:
-        None
-    """
-    pass
 
 def pytest_sessionfinish(session: Session, exitstatus: int) -> None:
     """

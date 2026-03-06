@@ -1,42 +1,68 @@
 import paramiko
 import pytest
+import re
 import time
 import logging
 from typing import Optional, Union
-from test_framework.utils.decorators import Decorator
-from tests.demo_test.settings import JUMP_SERVER_CONFIG
 
 
 class Ssh:
     """
-    SSH utility class for managing remote interactive shell sessions.
+    SSH utility for SONiC device automation.
 
-    This class provides methods to establish SSH connections, open interactive shells,
-    send commands, and cleanly close sessions. It is designed to integrate with pytest
-    and support structured logging, making it suitable for automated testing environments
-    such as network device configuration and validation.
+    Supports two CLI contexts:
+    - Linux shell (Click CLI): prompt ends with  $  e.g. admin@sonic:~$
+    - Klish CLI (entered via sonic-cli): prompt is sonic# or sonic(config[-*])#
 
-    Example usage:
-        ssh = Ssh()
-        ssh.connect_shell(hostname="192.168.1.1", username="admin", password="pass")
-        output = ssh.send_command_in_shell("show version")
+    Uses prompt-based reading instead of fixed sleep delays for reliable
+    and efficient command execution regardless of device response time.
+
+    Typical usage:
+        ssh = Ssh(logger=self.logger)
+        ssh.connect_shell("192.168.1.1", "admin", "password")
+
+        # Click CLI
+        output = ssh.send_shell_command("show ip route")
+
+        # Klish
+        ssh.enter_klish()
+        output = ssh.send_klish_command("show version")
+
+        ssh.configure()
+        ssh.send_klish_command("interface GigabitEthernet0/1")
+        ssh.end()
+
+        ssh.exit_klish()
         ssh.disconnect()
     """
+
+    # Prompt patterns
+    _SHELL_PROMPT = re.compile(r'\$\s*$', re.MULTILINE)
+    _KLISH_PROMPT = re.compile(r'^sonic[^\n]*#\s*$', re.MULTILINE)
+    _ANY_PROMPT   = re.compile(r'(\$\s*$|^sonic[^\n]*#\s*$)', re.MULTILINE)
+
+    _INVALID_PATTERNS = [
+        "Invalid input",
+        "Unrecognized command",
+        "Unknown command",
+        "% Error",
+        "^",
+    ]
+
+    _POLL_INTERVAL = 0.05   # seconds between recv checks when no data available
+    _RECV_BUFFER   = 4096   # bytes per recv chunk
 
     def __init__(
         self,
         logger: Optional[Union[logging.Logger, logging.LoggerAdapter]] = None,
     ) -> None:
-        """
-        Initializes the Ssh utility with an optional logger.
-
-        Args:
-            logger (Logger | LoggerAdapter | None): Custom logger instance.
-        """
         self.logger = logger or logging.getLogger(__name__)
         self.client = None
-        self.shell = None
-        self.jump_client = None
+        self.shell  = None
+
+    # -------------------------------------------------------------------------
+    # Connection
+    # -------------------------------------------------------------------------
 
     def connect_shell(
         self,
@@ -47,24 +73,21 @@ class Ssh:
         timeout: int = 10,
     ) -> None:
         """
-        Establishes an SSH connection and opens an interactive shell session.
-
-        This method logs into a remote host and invokes an interactive shell,
-        enabling multi-command sessions (e.g., network device CLI interaction).
+        Establish SSH connection and open an interactive shell.
+        Waits for the initial prompt before returning, so the caller
+        can immediately send commands.
 
         Args:
-            hostname (str): Target host IP or domain.
-            username (str): SSH username.
-            password (str): SSH password.
-            port (int): SSH port (default: 22).
-            timeout (int): Timeout in seconds for the connection attempt (default: 10).
-
-        Raises:
-            pytest.fail: If the connection or shell session fails.
+            hostname: Target host IP or domain.
+            username: SSH username.
+            password: SSH password.
+            port:     SSH port (default 22).
+            timeout:  Connection timeout in seconds (default 10).
         """
-        self.logger.info(f"Connecting to {hostname}:{port} as {username}")
+        self.logger.info(f"Connecting to {hostname}:{port} as {username}...")
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
         try:
             self.client.connect(
                 hostname=hostname,
@@ -77,163 +100,262 @@ class Ssh:
             self.logger.error(f"SSH connection to {hostname} failed: {e}")
             pytest.fail(f"SSH connection failed: {e}")
 
-        self.logger.info(f"Attempting to open interactive SSH shell...")
+        self.logger.info("Opening interactive shell...")
         try:
             self.shell = self.client.invoke_shell()
-            time.sleep(1)
             if not self.shell:
-                self.logger.error(
-                    "invoke_shell() returned None — unable to start shell session"
-                )
-                pytest.fail(
-                    "invoke_shell() returned None — unable to start shell session"
-                )
+                pytest.fail("invoke_shell() returned None")
         except Exception as e:
-            self.logger.error(
-                f"Exception occurred while opening interactive shell: {e}"
-            )
-            pytest.fail(f"Failed to start shell session: {e}")
+            self.logger.error(f"Failed to open shell: {e}")
+            pytest.fail(f"Failed to open shell: {e}")
 
-        self.logger.info("SSH interactive shell established.")
+        # Drain welcome banner and wait for initial shell prompt
+        self._read_until_prompt(timeout=timeout)
+        self.logger.info("SSH shell ready.")
 
-    @Decorator.use_jump_host(jump_config=JUMP_SERVER_CONFIG)
-    def connect_shell_via_jump(
-        self, hostname, username, password, port=22, timeout=10
-    ):
-        """
-        Initiates a shell connection to a target host via a jump server.
+    # -------------------------------------------------------------------------
+    # Core read engine
+    # -------------------------------------------------------------------------
 
-        This method primarily serves as an API endpoint. Its behavior is fully
-        managed by a decorator, making its body intentionally empty.
-        """
-        pass
-
-    def send_command_in_shell(
+    def _read_until_prompt(
         self,
-        command: str,
-        delay: float = 1.0,
-        check: bool = True,
-        full_output: bool = False,
-        pagination_prompt: str = "More",
-        max_pages: int = 10
+        prompt_re: Optional[re.Pattern] = None,
+        timeout: float = 10.0,
     ) -> str:
         """
-        Sends a command to the interactive shell session.
-
-        This method simulates CLI interaction. If full_output is True,
-        it will automatically handle paginated output by detecting '--More--'
-        and sending additional newlines until the full output is received.
+        Read from the shell channel until a known prompt is detected or timeout.
+        Handles Klish pagination (--More--) automatically.
 
         Args:
-            command (str): The CLI command to send.
-            delay (float): Delay between sends and reads (in seconds).
-            check (bool): Whether to check for invalid command output.
-            full_output (bool): If True, auto-handle pagination like '--More--'.
-            pagination_prompt (str): Pagination prompt to detect (default: 'More').
-            max_pages (int): Maximum allowed paginated screens to avoid infinite loops.
+            prompt_re: Compiled regex for the expected prompt.
+                       Defaults to _ANY_PROMPT (shell $ or klish #).
+            timeout:   Max seconds to wait.
 
         Returns:
-            str: Full output from the remote shell.
-
-        Raises:
-            pytest.fail: If no shell session is currently established or command is invalid.
-            RuntimeError: If pagination exceeds max_pages.
+            Full output received up to and including the prompt line.
         """
-        if not self.shell:
-            pytest.fail("Shell session is not established")
+        if prompt_re is None:
+            prompt_re = self._ANY_PROMPT
 
-        self.logger.info(f"Sending command: {command}")
-        self.shell.send(command + "\n")
-        time.sleep(delay)
+        output   = ""
+        deadline = time.time() + timeout
 
-        output = ""
-        result = self.shell.recv(100000).decode("utf-8")
-        output += result
-        self.logger.info(f"[Shell Output for '{command}']:\n{result}")
+        while time.time() < deadline:
+            if self.shell.recv_ready():
+                chunk   = self.shell.recv(self._RECV_BUFFER).decode("utf-8", errors="replace")
+                output += chunk
 
-        if full_output:
-            count = 0
-            while pagination_prompt in result:
-                if count > max_pages:
-                    pytest.fail("Exceeded max pagination limit while reading CLI output.")
-                self.shell.send(" ")
-                time.sleep(delay)
-                result = self.shell.recv(100000).decode("utf-8")
-                output += result
-                count += 1
-                self.logger.debug(f"[Pagination {count}] More output:\n{result}")
+                # Auto-handle Klish pagination
+                if "--More--" in chunk:
+                    self.shell.send(" ")
+                    continue
 
-        if check and self._is_invalid_command(output):
-            self.logger.error(f"Invalid command detected: {command}")
-            pytest.fail(
-                f"Command failed:\n" f"{command}\n" f"Output:\n" f"{output}"
+                if prompt_re.search(output):
+                    break
+            else:
+                time.sleep(self._POLL_INTERVAL)
+        else:
+            self.logger.warning(
+                f"Prompt not detected within {timeout}s — returning partial output."
             )
 
         return output
 
-    def _is_invalid_command(self, output: str) -> bool:
+    # -------------------------------------------------------------------------
+    # Command execution
+    # -------------------------------------------------------------------------
+
+    def _send_command(
+        self,
+        command: str,
+        timeout: float = 10.0,
+        prompt_re: Optional[re.Pattern] = None,
+        check: bool = True,
+    ) -> str:
         """
-        Detects invalid command based on shell output heuristics.
+        Send a command and wait for the next prompt.
 
         Args:
-            output (str): Shell output text.
+            command:   Command string to send.
+            timeout:   Max seconds to wait for prompt after sending.
+            prompt_re: Expected prompt pattern. Defaults to _ANY_PROMPT.
+            check:     If True, calls pytest.fail on invalid command output.
 
         Returns:
-            bool: True if output suggests an invalid command.
+            Command output as string.
         """
-        invalid_patterns = [
-            "Invalid input",
-            "Unrecognized command",
-            "^",
-            "Unknown command",
-        ]
-        return any(keyword in output for keyword in invalid_patterns)
+        if not self.shell:
+            pytest.fail("Shell session is not established.")
+
+        self.logger.info(f"CMD: {command}")
+        self.shell.send(command + "\n")
+        output = self._read_until_prompt(prompt_re=prompt_re, timeout=timeout)
+        self.logger.debug(f"OUTPUT:\n{output}")
+
+        if check and self._is_invalid_command(output):
+            self.logger.error(f"Invalid command: {command}\n{output}")
+            pytest.fail(f"Invalid command: {command}\nOutput:\n{output}")
+
+        return output
+
+    def send_shell_command(
+        self,
+        command: str,
+        timeout: float = 10.0,
+        check: bool = True,
+    ) -> str:
+        """
+        Send a Linux shell (Click CLI) command.
+        Waits for shell prompt ($).
+
+        Args:
+            command: Click CLI command.
+            timeout: Max seconds to wait.
+            check:   Fail on invalid command output.
+
+        Returns:
+            Command output.
+        """
+        return self._send_command(
+            command,
+            timeout=timeout,
+            prompt_re=self._SHELL_PROMPT,
+            check=check,
+        )
+
+    def send_klish_command(
+        self,
+        command: str,
+        timeout: float = 10.0,
+        check: bool = True,
+    ) -> str:
+        """
+        Send a Klish CLI command (sonic# or sonic(config)# context).
+        Waits for Klish prompt (#).
+
+        Args:
+            command: Klish command.
+            timeout: Max seconds to wait.
+            check:   Fail on invalid command output.
+
+        Returns:
+            Command output.
+        """
+        return self._send_command(
+            command,
+            timeout=timeout,
+            prompt_re=self._KLISH_PROMPT,
+            check=check,
+        )
+
+    # -------------------------------------------------------------------------
+    # Klish mode transitions
+    # -------------------------------------------------------------------------
+
+    def enter_klish(self, timeout: float = 10.0) -> None:
+        """
+        Enter Klish CLI from Linux shell.
+        Sends 'sonic-cli' and waits for sonic# prompt.
+        """
+        self.logger.info("Entering Klish CLI...")
+        self._send_command(
+            "sonic-cli",
+            timeout=timeout,
+            prompt_re=self._KLISH_PROMPT,
+            check=False,
+        )
+        self.logger.info("Klish CLI ready.")
+
+    def exit_klish(self, timeout: float = 10.0) -> None:
+        """
+        Exit Klish CLI back to Linux shell.
+        Sends 'exit' and waits for shell $ prompt.
+        """
+        self.logger.info("Exiting Klish CLI...")
+        self._send_command(
+            "exit",
+            timeout=timeout,
+            prompt_re=self._SHELL_PROMPT,
+            check=False,
+        )
+        self.logger.info("Returned to Linux shell.")
+
+    def configure(self, timeout: float = 10.0) -> None:
+        """
+        Enter configure mode in Klish.
+        sonic# -> sonic(config)#
+        """
+        self.logger.info("Entering configure mode...")
+        self._send_command(
+            "configure",
+            timeout=timeout,
+            prompt_re=self._KLISH_PROMPT,
+            check=False,
+        )
+
+    def exit_config(self, timeout: float = 10.0) -> None:
+        """
+        Exit one level of configure mode.
+        e.g. sonic(config-if)# -> sonic(config)# -> sonic#
+        """
+        self._send_command(
+            "exit",
+            timeout=timeout,
+            prompt_re=self._KLISH_PROMPT,
+            check=False,
+        )
+
+    def end(self, timeout: float = 10.0) -> None:
+        """
+        Return directly to sonic# from any configure depth.
+        """
+        self.logger.info("Ending config mode...")
+        self._send_command(
+            "end",
+            timeout=timeout,
+            prompt_re=self._KLISH_PROMPT,
+            check=False,
+        )
+
+    # -------------------------------------------------------------------------
+    # Utilities
+    # -------------------------------------------------------------------------
+
+    def _is_invalid_command(self, output: str) -> bool:
+        """
+        Detect invalid command indicators in command output.
+
+        Args:
+            output: Shell output text.
+
+        Returns:
+            True if the output suggests an invalid command.
+        """
+        return any(pattern in output for pattern in self._INVALID_PATTERNS)
 
     def disconnect(self) -> None:
         """
-        Safely disconnects all SSH-related resources.
-
-        This method is used to clean up the SSH connections established via
-        the jump host. It ensures that resources are properly released in
-        the correct order:
-
-            1. Close the interactive shell session (if any).
-            2. Close the SSH connection to the target host.
-            3. Close the SSH connection to the jump host.
-
-        Each shutdown step is wrapped in its own try/except block to ensure
-        that failure in one does not prevent others from executing.
-
-        This method is typically called after each test or before reconnecting
-        to a new target host via jump server.
+        Safely release all SSH resources (shell → client).
+        Each step is isolated so one failure does not block the others.
         """
         self.logger.info("Closing SSH resources...")
 
         try:
-            if hasattr(self, "shell") and self.shell:
+            if self.shell:
                 self.shell.close()
-                self.logger.info("Interactive shell closed.")
+                self.logger.info("Shell closed.")
         except Exception as e:
-            self.logger.warning(f"Faile to close shell: {e}")
+            self.logger.warning(f"Failed to close shell: {e}")
         finally:
             self.shell = None
 
         try:
-            if hasattr(self, "client") and self.client:
+            if self.client:
                 self.client.close()
-                self.logger.info("Target host connection closed.")
+                self.logger.info("Connection closed.")
         except Exception as e:
-            self.logger.warning(f"Failed to close target host connection: {e}")
+            self.logger.warning(f"Failed to close connection: {e}")
         finally:
             self.client = None
 
-        try:
-            if hasattr(self, "jump_client") and self.jump_client:
-                self.jump_client.close()
-                self.logger.info("Jump host connection closed.")
-        except Exception as e:
-            self.logger.warning(f"Failed to close jump host connection: {e}")
-        finally:
-            self.jump_client = None
-
-        self.logger.info("All SSH resources have been released.")
+        self.logger.info("SSH resources released.")
