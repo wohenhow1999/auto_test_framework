@@ -161,10 +161,10 @@ import os
 from test_framework.config.settings import ServerConfig
 
 SERVER_ONE_CONFIG = ServerConfig(
-    name=os.getenv("SERVER1_NAME", "T8164_1"),
+    name=os.getenv("SERVER1_NAME", "dut_name"),
     host=os.getenv("SERVER1_HOST", "10.135.179.247"),
-    username=os.getenv("SERVER1_USERNAME", "admin"),
-    password=os.getenv("SERVER1_PASSWORD", "YourPaSsWoRd"),
+    username=os.getenv("SERVER1_USERNAME", "user_name"),
+    password=os.getenv("SERVER1_PASSWORD", "password"),
     port=int(os.getenv("SERVER1_PORT", "22")),
 )
 ```
