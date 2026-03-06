@@ -124,7 +124,7 @@ class Assertion:
             pytest.fail: If condition is True.
         """
         self.logger.debug(
-            f"[assert_true] Checking condition={repr(condition)}"
+            f"[assert_false] Checking condition={repr(condition)}"
         )
 
         if condition:

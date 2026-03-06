@@ -2,7 +2,6 @@ import os
 import json
 import allure
 import logging
-from io import StringIO
 from contextlib import contextmanager
 from typing import Optional, Union
 from test_framework.utils.logger import logger_instance
@@ -95,6 +94,9 @@ class Allure:
         Returns:
             None: This method writes directly to a file and does not return a value.
         """
+        if not env_info:
+            return
+
         os.makedirs(report_dir, exist_ok=True)
 
         env_file_path = os.path.join(report_dir, "environment.properties")
@@ -114,11 +116,14 @@ class Allure:
         Allure step wrapper that auto-attaches logs from logger_instance
         to this step block.
         """
+        log_stream = logger_instance.step_log_stream
+        log_stream.truncate(0)
+        log_stream.seek(0)
+
         with allure.step(title):
             try:
                 yield
             finally:
-                log_stream = logger_instance.step_log_stream
                 log_content = log_stream.getvalue()
                 if log_content:
                     allure.attach(
