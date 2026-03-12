@@ -7,6 +7,19 @@ PORT=5666
 
 PYTEST_COMMAND="pytest -s"
 NODE_IDS=""
+REPEAT_COUNT=1
+
+# Parse --repeat N flag (e.g. ./run_test.sh --repeat 3 test_foo)
+if [[ "$1" == "--repeat" ]]; then
+    if [[ -z "$2" || ! "$2" =~ ^[0-9]+$ ]]; then
+        echo "❌ Usage: ./run_test.sh --repeat <N> [test targets...]"
+        exit 1
+    fi
+    REPEAT_COUNT="$2"
+    shift 2
+    echo "🔁 Repeat count: ${REPEAT_COUNT}"
+    PYTEST_COMMAND="${PYTEST_COMMAND} --count=${REPEAT_COUNT}"
+fi
 
 if [ $# -eq 0 ]; then
     echo "No specific test case provided. Running all tests."

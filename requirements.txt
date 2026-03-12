@@ -1,4 +1,5 @@
 pytest==8.4.1
+pytest-repeat==0.9.3
 pytest-sugar==1.0.0
 requests==2.32.4
 black==25.1.0

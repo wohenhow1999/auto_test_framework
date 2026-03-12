@@ -4,6 +4,11 @@ import re
 import time
 import logging
 from typing import Optional, Union
+from test_framework.reporting.allure_report_helpers import Allure
+
+# Written at most once per pytest session — prevents duplicate parsing when
+# multiple test classes each call connect_shell().
+_env_properties_written: bool = False
 
 
 class Ssh:
@@ -41,6 +46,9 @@ class Ssh:
     _KLISH_PROMPT = re.compile(r'^sonic[^\n]*#\s*$', re.MULTILINE)
     _ANY_PROMPT   = re.compile(r'(\$\s*$|^sonic[^\n]*#\s*$)', re.MULTILINE)
 
+    # ANSI escape code pattern (covers color, cursor, private mode sequences)
+    _ANSI_ESCAPE  = re.compile(r'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
     _INVALID_PATTERNS = [
         "Invalid input",
         "Unrecognized command",
@@ -56,9 +64,10 @@ class Ssh:
         self,
         logger: Optional[Union[logging.Logger, logging.LoggerAdapter]] = None,
     ) -> None:
-        self.logger = logger or logging.getLogger(__name__)
-        self.client = None
-        self.shell  = None
+        self.logger       = logger or logging.getLogger(__name__)
+        self.client       = None
+        self.shell        = None
+        self._last_prompt = ""   # last seen prompt, prepended to next command log
 
     # -------------------------------------------------------------------------
     # Connection
@@ -100,7 +109,6 @@ class Ssh:
             self.logger.error(f"SSH connection to {hostname} failed: {e}")
             pytest.fail(f"SSH connection failed: {e}")
 
-        self.logger.info("Opening interactive shell...")
         try:
             self.shell = self.client.invoke_shell()
             if not self.shell:
@@ -109,9 +117,17 @@ class Ssh:
             self.logger.error(f"Failed to open shell: {e}")
             pytest.fail(f"Failed to open shell: {e}")
 
-        # Drain welcome banner and wait for initial shell prompt
-        self._read_until_prompt(timeout=timeout)
-        self.logger.info("SSH shell ready.")
+        # Drain welcome banner, wait for initial prompt, then save it
+        banner = self._read_until_prompt(timeout=timeout)
+        self._save_last_prompt(self._strip_ansi(banner))
+        self.logger.info(f"Connected to {hostname}.")
+
+        # Collect device version info once per session and write to Allure environment
+        global _env_properties_written
+        if not _env_properties_written:
+            version_info = self.parse_show_version()
+            Allure.generate_environment_properties(env_info=version_info)
+            _env_properties_written = True
 
     # -------------------------------------------------------------------------
     # Core read engine
@@ -145,8 +161,8 @@ class Ssh:
                 chunk   = self.shell.recv(self._RECV_BUFFER).decode("utf-8", errors="replace")
                 output += chunk
 
-                # Auto-handle Klish pagination
-                if "--More--" in chunk:
+                # Auto-handle Klish pagination (case-insensitive: --More-- / --more--)
+                if "--more--" in chunk.lower():
                     self.shell.send(" ")
                     continue
 
@@ -160,6 +176,16 @@ class Ssh:
             )
 
         return output
+
+    def _strip_ansi(self, text: str) -> str:
+        """Remove ANSI escape codes from terminal output."""
+        return self._ANSI_ESCAPE.sub('', text)
+
+    def _save_last_prompt(self, output: str) -> None:
+        """Extract and save the last line of output as the current prompt."""
+        lines = output.rstrip().splitlines()
+        if lines:
+            self._last_prompt = lines[-1]
 
     # -------------------------------------------------------------------------
     # Command execution
@@ -182,18 +208,20 @@ class Ssh:
             check:     If True, calls pytest.fail on invalid command output.
 
         Returns:
-            Command output as string.
+            Command output as string (ANSI codes stripped).
         """
         if not self.shell:
             pytest.fail("Shell session is not established.")
 
-        self.logger.info(f"CMD: {command}")
         self.shell.send(command + "\n")
-        output = self._read_until_prompt(prompt_re=prompt_re, timeout=timeout)
-        self.logger.debug(f"OUTPUT:\n{output}")
+        raw    = self._read_until_prompt(prompt_re=prompt_re, timeout=timeout)
+        output = self._strip_ansi(raw)
+
+        self.logger.info("\n" + self._last_prompt + output)
+        self._save_last_prompt(output)
 
         if check and self._is_invalid_command(output):
-            self.logger.error(f"Invalid command: {command}\n{output}")
+            self.logger.error(f"Invalid command detected: {command}")
             pytest.fail(f"Invalid command: {command}\nOutput:\n{output}")
 
         return output
@@ -252,40 +280,36 @@ class Ssh:
     # Klish mode transitions
     # -------------------------------------------------------------------------
 
-    def enter_klish(self, timeout: float = 10.0) -> None:
+    def enter_klish(self, timeout: float = 30.0) -> None:
         """
         Enter Klish CLI from Linux shell.
         Sends 'sonic-cli' and waits for sonic# prompt.
+        Uses a longer default timeout (30s) as Klish may take time to initialize.
         """
-        self.logger.info("Entering Klish CLI...")
         self._send_command(
             "sonic-cli",
             timeout=timeout,
             prompt_re=self._KLISH_PROMPT,
             check=False,
         )
-        self.logger.info("Klish CLI ready.")
 
     def exit_klish(self, timeout: float = 10.0) -> None:
         """
         Exit Klish CLI back to Linux shell.
         Sends 'exit' and waits for shell $ prompt.
         """
-        self.logger.info("Exiting Klish CLI...")
         self._send_command(
             "exit",
             timeout=timeout,
             prompt_re=self._SHELL_PROMPT,
             check=False,
         )
-        self.logger.info("Returned to Linux shell.")
 
     def configure(self, timeout: float = 10.0) -> None:
         """
         Enter configure mode in Klish.
         sonic# -> sonic(config)#
         """
-        self.logger.info("Entering configure mode...")
         self._send_command(
             "configure",
             timeout=timeout,
@@ -309,7 +333,6 @@ class Ssh:
         """
         Return directly to sonic# from any configure depth.
         """
-        self.logger.info("Ending config mode...")
         self._send_command(
             "end",
             timeout=timeout,
@@ -320,6 +343,29 @@ class Ssh:
     # -------------------------------------------------------------------------
     # Utilities
     # -------------------------------------------------------------------------
+
+    def parse_show_version(self) -> dict:
+        """
+        Run 'show version' on the Linux shell and parse device metadata.
+
+        Returns a dict of key/value pairs from the output, stopping before
+        the "Docker images:" section.  Keys use the original casing from the
+        device output (e.g. "SONiC Software Version", "HwSKU", "Uptime").
+
+        Call this after connect_shell() and before enter_klish().
+        """
+        output = self.send_shell_command("show version", timeout=15.0, check=False)
+        result = {}
+        for line in output.splitlines():
+            if line.strip().startswith("Docker images:"):
+                break
+            if ":" in line:
+                key, _, value = line.partition(":")
+                key = key.strip()
+                value = value.strip()
+                if key:
+                    result[key] = value
+        return result
 
     def _is_invalid_command(self, output: str) -> bool:
         """
@@ -338,12 +384,11 @@ class Ssh:
         Safely release all SSH resources (shell → client).
         Each step is isolated so one failure does not block the others.
         """
-        self.logger.info("Closing SSH resources...")
+        self.logger.info("Closing SSH connection...")
 
         try:
             if self.shell:
                 self.shell.close()
-                self.logger.info("Shell closed.")
         except Exception as e:
             self.logger.warning(f"Failed to close shell: {e}")
         finally:
@@ -352,10 +397,9 @@ class Ssh:
         try:
             if self.client:
                 self.client.close()
-                self.logger.info("Connection closed.")
         except Exception as e:
             self.logger.warning(f"Failed to close connection: {e}")
         finally:
             self.client = None
 
-        self.logger.info("SSH resources released.")
+        self.logger.info("SSH connection closed.")
