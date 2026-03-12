@@ -33,17 +33,15 @@ Integrates Allure reporting, SSH device control, CLI execution, and web automati
 │   ├── conftest.py                # Shared pytest hooks (Allure log attachment)
 │   ├── config/
 │   │   └── settings.py            # Global test metadata (executor name, etc.)
-│   ├── demo_test/
+│   ├── demo/
 │   │   ├── settings.py
 │   │   └── test_demo.py
-│   ├── api_test/
+│   ├── bgp/
 │   │   ├── settings.py
-│   │   └── test_api_demo.py
-│   ├── web_test/
-│   │   ├── settings.py
-│   │   └── test_web_demo.py
-│   └── bgp_test/
-│       └── settings.py
+│   │   └── test_bgp_enable_disable.py
+│   └── issue_test/
+│       ├── settings.py
+│       └── test_issue_221113.py
 ├── logs/
 ├── reports/
 │   ├── allure-results/
@@ -64,6 +62,9 @@ Integrates Allure reporting, SSH device control, CLI execution, and web automati
 ```
 tests/                  <- Test suites (one folder per feature)
     conftest.py         <- Shared hooks applied to all test folders
+    demo/               <- Demo / sanity tests
+    bgp/                <- BGP feature tests
+    issue_test/         <- Issue reproduction / regression tests
     <suite>/
         settings.py     <- Device configs for this suite
         test_*.py       <- Test cases
@@ -156,15 +157,15 @@ Each test suite defines its own `settings.py` using `ServerConfig` from the fram
 Values are loaded from environment variables with fallback defaults for local development.
 
 ```python
-# tests/bgp_test/settings.py
+# tests/bgp/settings.py
 import os
 from test_framework.config.settings import ServerConfig
 
 SERVER_ONE_CONFIG = ServerConfig(
-    name=os.getenv("SERVER1_NAME", "T8164_1"),
+    name=os.getenv("SERVER1_NAME", "dut_name"),
     host=os.getenv("SERVER1_HOST", "10.135.179.247"),
-    username=os.getenv("SERVER1_USERNAME", "admin"),
-    password=os.getenv("SERVER1_PASSWORD", "YourPaSsWoRd"),
+    username=os.getenv("SERVER1_USERNAME", "user_name"),
+    password=os.getenv("SERVER1_PASSWORD", "password"),
     port=int(os.getenv("SERVER1_PORT", "22")),
 )
 ```
@@ -208,6 +209,11 @@ pip install --no-cache-dir -r requirements.txt
 
 # Multiple functions
 ./run_test.sh test_case_a test_case_b
+
+# Repeat N times (requires pytest-repeat)
+./run_test.sh --repeat 3 test_bgp_neighbor
+./run_test.sh --repeat 5 TestBgp
+./run_test.sh --repeat 3              # repeat all tests
 ```
 
 Allure report available at `http://localhost:8180` after execution.
